@@ -58,17 +58,20 @@ class Agent:
             state = env.observation()
             print("Current state:", state)
             state = torch.tensor(state, dtype=torch.float, device=device)
-
+            
             terminated = False
             episode_reward = 0.0
 
-            while not terminated:
-                
+            
+            if not terminated:
+
                 # next action: epsilon greedy
                 if is_training and random.random() < epsilon:
                     action = env.continuous_action_space.sample()
                     action = torch.tensor(action, dtype=torch.float, device=device)
+                    #print(f'random action chosen for state {state}')
                 else:
+                    #print(f'nonrandom action chosen for state {state}')
                     with torch.no_grad():
                         action = policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
                         #action = torch.tensor(action, dtype=torch.float, device=device)
@@ -92,6 +95,11 @@ class Agent:
             
             epsilon = max(epsilon * self.epsilon_decay, self.epsilon_min)
             epsilon_history.append(epsilon)
+
+            print("Action:", action)
+            print("Next state:", new_state)
+            print("Reward:", reward)
+            print()
 
 if __name__ == '__main__':
     agent = Agent('datacenter')
