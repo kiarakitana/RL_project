@@ -9,6 +9,7 @@ from experience_replay import ReplayMemory
 import itertools
 import yaml
 import random
+import argparse
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -28,7 +29,16 @@ class Agent:
                 
     
     def run(self, is_training=True):
-        env = DataCenterEnv(path_to_test_data='/Users/shivanikandhai/Documents/School/Artificial_Intelligence/Reinforcement Learning/train.xlsx')
+        #env = DataCenterEnv(path_to_test_data='/Users/shivanikandhai/Documents/School/Artificial_Intelligence/Reinforcement Learning/train.xlsx')
+
+        args = argparse.ArgumentParser()
+        args.add_argument('--path', type=str, default='train.xlsx')
+        args = args.parse_args()
+
+        np.set_printoptions(suppress=True, precision=2)
+        path_to_dataset = args.path
+
+        env = DataCenterEnv(path_to_dataset)
 
         num_actions = 1 # continuous action
         num_states = 4 # 4 elements in a state 
@@ -45,8 +55,8 @@ class Agent:
 
         
         for episode in itertools.count():
-            state = env.reset()
-            print("Initial state:", state)
+            state = env.observation()
+            print("Current state:", state)
             state = torch.tensor(state, dtype=torch.float, device=device)
 
             terminated = False
@@ -73,12 +83,12 @@ class Agent:
                 reward = torch.tensor(reward, dtype=torch.float, device=device)
 
                 if is_training:
-                    memory.append(state,action,new_state,reward,terminated)
+                    memory.append((state, action, new_state, reward, terminated))
                 
                 # move to new state
                 state = new_state
 
-            rewards_per_episode.apend(episode_reward)
+            rewards_per_episode.append(episode_reward)
             
             epsilon = max(epsilon * self.epsilon_decay, self.epsilon_min)
             epsilon_history.append(epsilon)
