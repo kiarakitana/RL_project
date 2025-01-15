@@ -2,8 +2,8 @@ import numpy as np
 from collections import defaultdict
 
 class TabularQAgent:
-    def __init__(self, learning_rate=0.1, discount_factor=0.95, epsilon_init=1.0, 
-                 epsilon_decay=0.9995, epsilon_min=0.05):
+    def __init__(self, learning_rate=0.1, discount_factor=0.985, epsilon_init=1.0, 
+                 epsilon_decay=0.9995, epsilon_min=0.01):
         # Q-table: Use defaultdict to handle state-action pairs lazily
         self.q_table = defaultdict(lambda: defaultdict(float))
         self.lr = learning_rate
@@ -15,7 +15,8 @@ class TabularQAgent:
         # Discretization parameters
         self.storage_bins = np.linspace(0, 170, 18)  # 0 to max (120 + 50) in 10 MWh steps
         self.price_bins = np.array([0, 25, 50, 75, 100, 150, 200, 300])  # Price brackets
-        self.action_bins = np.linspace(-1, 1, 11)  # 11 discrete actions including -1, 0, 1
+        self.price_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 50, 55, 60, 65, 70, 80, 120, 200, 500])  # Price brackets (we can change that later if it doesnt work)
+        self.action_bins = np.array([-1, 0, 1])  # actions -1, 0, 1 (sell, do nothing, buy)
         
     def discretize_state(self, state):
         """Convert continuous state to discrete state"""
