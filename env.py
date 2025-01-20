@@ -3,19 +3,24 @@ from gym import spaces
 import numpy as np
 import pandas as pd
 
+
 class DataCenterEnv(gym.Env):
     def __init__(self, path_to_test_data):
         super(DataCenterEnv, self).__init__()
-        self.continuous_action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32) # negative values = selling, positive values = buying?
-        self.test_data = pd.read_excel(path_to_test_data)                                       # excel sheet with data
-        self.price_values = self.test_data.iloc[:, 1:25].to_numpy()                             # prices per hour for a day [comma separated]
-        self.timestamps = self.test_data['PRICES']                                              # day time stamps dd/mm/yyyy
+        self.continuous_action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+        self.test_data = pd.read_excel(path_to_test_data)
+        self.price_values = self.test_data.iloc[:, 1:25].to_numpy()
+        self.timestamps = self.test_data['PRICES']
+        self.start_date = self.test_data['PRICES'].iloc[0]
+        self.start_date_day = self.start_date.day_name()
 
-        self.daily_energy_demand = 120  # MWh                                                   # total energy per day required
-        self.max_power_rate = 10  # MW                                                          # max power rate for buying/selling
-        self.storage_level = 0                                                                  # initial storage in MWh
-        self.hour = 1                                                                           # start at hour 1
-        self.day = 1                                                                            # start at day 1
+
+        self.daily_energy_demand = 120  # MWh
+        self.max_power_rate = 10  # MW
+        self.storage_level = 0
+        self.hour = 1
+        self.day = 1
+        # self.start_date = self.test_data['DATE'][0]
 
     def step(self, action):
         """
@@ -104,3 +109,9 @@ class DataCenterEnv(gym.Env):
         price = self.price_values[self.day - 1][self.hour - 1]
         self.state = np.array([self.storage_level, price, self.hour, self.day])
         return self.state
+
+    def reset(self):
+        self.hour = 1
+        self.day = 1
+        self.storage_level = 0
+        return self.observation()
