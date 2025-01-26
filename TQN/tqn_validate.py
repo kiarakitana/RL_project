@@ -28,9 +28,6 @@ def validate():
     # Set epsilon=0 for purely greedy evaluation
     agent.epsilon = 0.0
 
-    # Build day_of_week and month lookups for the validation data
-    dow_map, month_map = build_day_maps(args.path)
-
     # Reset price tracker for validation
     global price_tracker
     price_tracker = PriceTracker()
@@ -42,59 +39,55 @@ def validate():
 
     total_reward = 0.0
     total_actual_reward = 0.0
-    daily_rewards = []
-    current_day_reward = 0.0
-    last_hour = 1
+    show = 360
+    h = 0
 
     while not terminated:
         storage_level, price, hour, day = state
-        
-        # Track daily rewards
-        if hour == 1 and last_hour == 24:
-            daily_rewards.append(current_day_reward)
-            current_day_reward = 0.0
-        last_hour = hour
-
-        # Convert day -> day_of_week, month_of_year
-        day_1_based = int(day)
-        day_of_week = dow_map[day_1_based - 1]
-        month_of_year = month_map[day_1_based - 1]
 
         # Update price tracker
-        price_tracker.update(price)
+        price_tracker.update(price, day)
+        daily_avg = price_tracker.daily_avg
+        weekly_avg = price_tracker.biweekly_avg
         
-        bin_idx = storage_to_bin(storage_level)
-        price_idx = price_bins(price)
-        hour_idx = int(hour) - 1
-        dow_idx = int(day_of_week)
-        month_idx = int(month_of_year)
+        bin_idx = small_storage_bin(storage_level)
+        hour_idx = hour_bins(int(hour) - 1)
+        daily_r_idx = daily_avg_diff_bins(price, daily_avg)
+        weekly_r_idx = weekly_avg_diff_bins(price, weekly_avg)
 
-        # Choose best action (purely greedy)
-        action_idx = agent.get_action(bin_idx, price_idx, hour_idx, dow_idx, month_idx)
-        action_cont = discrete_action_to_continuous(action_idx)
+        action = agent.get_action(
+            bin_idx, daily_r_idx, weekly_r_idx, hour_idx, price, weekly_avg
+            )
 
-        next_state, reward, terminated = env.step(action_cont)
+        next_state, reward, terminated = env.step(action)
+
+        # Get the true action
+        true_action = 0 if reward == 0 else reward / reward
 
         # Compute shaped reward
-        actual_reward = reward_function(reward, bin_idx, action_cont, price)
+        actual_reward = reward_function(
+            bin_idx, true_action, price,  price / daily_avg, price / weekly_avg, weekly_avg
+            )
 
         total_reward += reward
         total_actual_reward += actual_reward
-        current_day_reward += actual_reward
 
         state = next_state
 
-    # Add last day's reward if needed
-    if current_day_reward != 0:
-        daily_rewards.append(current_day_reward)
+        if h <= show:
+            if true_action == 0:
+                a = 'hold'
+            if true_action == 1:
+                a = 'buy'
+            if true_action == -1:
+                a = 'sell'
+            print(f'day: {day}  |  hour: {hour}  |  storage: {storage_level}  |  price: {price}  |  daily avg: {round(daily_avg, 2)}  |  biweekly avg: {round(weekly_avg, 2)}  action: {a}  | reward: {round(actual_reward, 2)}')
+            h += 1
+
 
     print("\nValidation Results:")
     print(f"Total Environment Reward: {total_reward:.2f}")
     print(f"Total Shaped Reward: {total_actual_reward:.2f}")
-    print(f"Average Daily Reward: {np.mean(daily_rewards):.2f}")
-    print(f"Best Daily Reward: {max(daily_rewards):.2f}")
-    print(f"Worst Daily Reward: {min(daily_rewards):.2f}")
-    print(f"Number of Days: {len(daily_rewards)}")
 
 if __name__ == "__main__":
     validate()

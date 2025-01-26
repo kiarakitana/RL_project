@@ -7,13 +7,20 @@ class PriceTracker:
         """
         Initialize price tracking with specified lookback periods
         24 hours = 1 day
-        336 hours = 14 days (2 weeks)
+        168 hours = 7 days (1 weeks)
         """
         self.daily_prices = deque(maxlen=lookback_daily)
         self.biweekly_prices = deque(maxlen=lookback_2weeks)
+
+        # Keep track of which day we are in so we can reset daily prices
+        self._last_day = None
         
-    def update(self, price):
+    def update(self, price, day):
         """Add new price and update averages"""
+        if day != self._last_day:
+            self.daily_prices.clear()
+            self._last_day = day
+
         self.daily_prices.append(price)
         self.biweekly_prices.append(price)
         
@@ -31,121 +38,63 @@ class PriceTracker:
             return np.mean(self.biweekly_prices)
         return 50.0  # Default value if no history
 
-# Global price tracker instance
-price_tracker = PriceTracker()
-
-def build_day_maps(path_to_dataset):
-    """
-    Reads the same spreadsheet as the environment,
-    then builds arrays mapping day -> day_of_week, day -> month_of_year.
-    day_of_week in [0..6], month_of_year in [0..11].
-    """
-    df = pd.read_excel(path_to_dataset)  # same as in env
-    timestamps = df['PRICES']           # day time stamps dd/mm/yyyy
-
-    dow_map = []
-    month_map = []
-
-    for i in range(len(timestamps)):
-        date = pd.to_datetime(timestamps[i], dayfirst=True)
-        dow_map.append(date.weekday())     # Monday=0, Sunday=6
-        month_map.append(date.month - 1)   # 0..11
-
-    return np.array(dow_map), np.array(month_map)
-
-def storage_to_bin(storage_level, bin_size=10.0, max_storage=170.0):
-    """Convert continuous storage_level to integer bin index"""
-    if storage_level < 0:
+def small_storage_bin(storage_level, bin_size=10.0, max_storage=170.0, req_storage=120.0):
+    if storage_level <= 0:
         return 0
-    if storage_level >= max_storage:
-        return 18
-    bin_index = int(storage_level // bin_size)
-    return min(bin_index, 18)
-
-def discrete_action_to_continuous(action_idx):
-    """Map discrete action space to continuous values"""
-    if action_idx == 0:
-        return 0.0    # hold
-    elif action_idx == 1:
-        return 1.0    # buy
-    elif action_idx == 2:
-        return -1.0   # sell
-
-def price_bins(price):
-    """Convert continuous price to discrete bins"""
-    bins = np.array([0, 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 75, 100, 200])
-    return np.searchsorted(bins, price, side='right') - 1
-
-def reward_function(env_reward, storage, action, price):
-    """
-    Enhanced reward function incorporating price averages
-    Args:
-        env_reward: original environment reward
-        storage: current storage bin index
-        action: continuous action value (-1, 0, 1)
-        price: current price
-    """
-    # Update price tracker
-    price_tracker.update(price)
-    daily_avg = price_tracker.daily_avg
-    biweekly_avg = price_tracker.biweekly_avg
-    
-    # Base reward components
-    new_reward = 0.0
-    
-    # Buying strategy (action > 0)
-    if action > 0:
-        # Penalize buying when storage is high
-        if storage >= 17:
-            new_reward = -10
-        else:
-            # Buy reward based on price comparison with averages
-            price_diff_daily = (daily_avg - price) / daily_avg
-            price_diff_biweekly = (biweekly_avg - price) / biweekly_avg
-            
-            # Weighted combination of price differences
-            price_advantage = 0.7 * price_diff_daily + 0.3 * price_diff_biweekly
-            
-            if storage < 12:  # Low storage: more urgent to buy
-                new_reward = 5 * price_advantage + 4
-            else:  # Normal buying
-                new_reward = 5 * price_advantage
-    
-    # Selling strategy (action < 0)
-    elif action < 0:
-        # Strong sell signals
-        if price >= 4 * biweekly_avg:
-            new_reward = 10
-        elif storage == 18:  # Must sell when storage full
-            new_reward = 10
-        elif storage < 12:  # Penalize selling at low storage
-            new_reward = -5
-        else:
-            # Sell reward based on price comparison with averages
-            price_diff_daily = (price - daily_avg) / daily_avg
-            price_diff_biweekly = (price - biweekly_avg) / biweekly_avg
-            
-            # Weighted combination of price differences
-            price_advantage = 0.7 * price_diff_daily + 0.3 * price_diff_biweekly
-            new_reward = 5 * price_advantage - 2
-    
-    # Holding strategy (action == 0)
+    if storage_level < req_storage:
+        return 1
+    if storage_level == req_storage:
+        return 2
+    if storage_level < max_storage:
+        return 3
+    if storage_level == max_storage:
+        return 4
     else:
-        if storage == 17:
-            new_reward = 5  # Good to hold near capacity
-        elif storage == 18:
-            new_reward = -10  # Penalize holding at full capacity
-        else:
-            # Hold reward based on price trends
-            price_diff_daily = (daily_avg - price) / daily_avg
-            price_diff_biweekly = (biweekly_avg - price) / biweekly_avg
-            
-            # If current price is significantly below averages, penalize holding
-            price_advantage = 0.7 * price_diff_daily + 0.3 * price_diff_biweekly
-            if storage >= 12:
-                new_reward = -3 * price_advantage + 2
-            else:
-                new_reward = -3 * price_advantage
-    
-    # Clip final reward
-    return np.clip(new_reward, -10, 10)
+        return 5
+
+def daily_avg_diff_bins(price, daily_avg):
+    """Convert price to daily avg ratio to discrete bins"""
+    bins = np.array([0, 0.5, 0.75, 1, 1.25, 1.5, 2])
+    ratio = price / daily_avg
+    return np.searchsorted(bins, ratio, side='right') - 1
+
+def weekly_avg_diff_bins(price, weekly_avg):
+    """Convert price to weekly avg ratio to discrete bins"""
+    bins = np.array([0, 0.5, 0.75, 1, 1.25, 1.5, 2])
+    ratio = price / weekly_avg
+    return np.searchsorted(bins, ratio, side='right') - 1
+
+def hour_bins(hour):
+    """Convert hours to discrete bins"""
+    bins = np.array([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22])
+    return np.searchsorted(bins, hour, side='right') - 1
+
+def reward_function(storage, action, price,  daily_r, weekly_r, weekly_avg):
+    alfa = 0.8
+
+    reduce_selling = 1
+    if action < 0:
+        reduce_selling = 0.8
+
+    storage_bonus = 0
+    if storage < 2:                  # when storage low give small reward for buying and penalty for selling
+        storage_bonus = 1 * action
+    if storage >= 4 and action > 0:  # buying above the capacity
+        storage_bonus = -5
+    if storage == 5 and action == 0: # waiting above capacity
+        storage_bonus = -5
+    # if storage >= 2 and action == 0: # waiting above req
+    #     storage_bonus = 1
+
+    selling_high = 0
+    if price >= 2 * weekly_avg and action < 0:
+        selling_high = 5
+
+    price_advantage = alfa * daily_r + (1 - alfa) * weekly_r
+    price_advantage = np.clip(price_advantage, 0, 2)
+
+    buying_low = 0
+    if storage < 4 and action > 0 and price_advantage <= 0.7:
+        buying_low = 2
+
+    return -1 * action * reduce_selling * price_advantage + storage_bonus + selling_high + buying_low

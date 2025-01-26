@@ -29,9 +29,6 @@ def main():
     args = parser.parse_args()
 
     path_to_dataset = args.path
-
-    # Build day_of_week and month lookups from the same dataset
-    dow_map, month_map = build_day_maps(path_to_dataset)
     
     # Create the agent
     agent = QLearningAgent(alpha=args.alpha,
@@ -40,7 +37,6 @@ def main():
     
     # Use deques to store reward history
     actual_rewards_history = deque(maxlen=5)
-    daily_rewards_history = deque(maxlen=24)  # Track rewards per hour
     
     # For multiple training epochs over the entire dataset
     for epoch in range(args.epochs):
@@ -48,7 +44,7 @@ def main():
         terminated = False
         total_reward = 0.0
         total_actual_reward = 0.0
-        daily_reward = 0.0
+        # daily_reward = 0.0
 
         # Keep track of action counts
         action_counts = np.zeros(agent.n_actions, dtype=int)
@@ -70,75 +66,64 @@ def main():
         
         state = env.observation()  # [storage_level, price, hour, day]
         
-        # Initialize price tracker with first 336 hours (2 weeks) if available
-        df = pd.read_excel(path_to_dataset)
-        initial_prices = df.iloc[0:336, 1:25].values.flatten()  # Get first 2 weeks
-        for init_price in initial_prices:
-            price_tracker.update(init_price)
-        
         while not terminated:
             storage_level, price, hour, day = state
 
-            # Convert day -> day_of_week, month_of_year
-            day_1_based = int(day)
-            day_of_week = dow_map[day_1_based - 1]     # 0..6
-            month_of_year = month_map[day_1_based - 1]  # 0..11
+            # Update price tracker
+            price_tracker.update(price, day)
+            daily_avg = price_tracker.daily_avg
+            weekly_avg = price_tracker.biweekly_avg
             
             # Convert storage to bin
-            bin_idx = storage_to_bin(storage_level)
-            price_idx = price_bins(price)
-            hour_idx = int(hour) - 1
-            dow_idx = int(day_of_week)
-            month_idx = int(month_of_year)
+            bin_idx = small_storage_bin(storage_level)
+            hour_idx = hour_bins(int(hour) - 1)
+            daily_r_idx = daily_avg_diff_bins(price, daily_avg)
+            weekly_r_idx = weekly_avg_diff_bins(price, weekly_avg)
 
             # Get action from agent
-            action_idx = agent.get_action(bin_idx, price_idx, hour_idx, dow_idx, month_idx)
-            action_counts[action_idx] += 1
-            
-            # Convert discrete action -> continuous
-            action_cont = discrete_action_to_continuous(action_idx)
+            action = agent.get_action(bin_idx, daily_r_idx, weekly_r_idx, hour_idx, price, weekly_avg)
             
             # Step in the environment
-            next_state, reward, terminated = env.step(action_cont)
+            next_state, reward, terminated = env.step(action)
+
+            # Get the true action
+            true_action = 0 if reward == 0 else int(reward / reward)
+
+            # Count actions
+            if action == -1:
+                action_counts[2] += 1
+            else:
+                action_counts[true_action] += 1
             
             # Parse next state
             next_storage, next_price, next_hour, next_day = next_state
-            next_day_1_based = int(next_day)
-            next_dow = dow_map[next_day_1_based - 1]
-            next_month = month_map[next_day_1_based - 1]
 
-            next_bin_idx = storage_to_bin(next_storage)
-            next_price_idx = price_bins(next_price)
-            next_hour_idx = int(next_hour) - 1
-            next_dow_idx = int(next_dow)
-            next_month_idx = int(next_month)
+            price_tracker.update(next_price, next_day)
+            next_daily_avg = price_tracker.daily_avg
+            next_weekly_avg = price_tracker.biweekly_avg
+
+            next_bin_idx = small_storage_bin(next_storage)
+            next_daily_r_idx = daily_avg_diff_bins(price, next_daily_avg)
+            next_weekly_r_idx = weekly_avg_diff_bins(price, next_weekly_avg)
+            next_hour_idx = hour_bins(int(next_hour) - 1)
             
             # Calculate shaped reward using price history
-            actual_reward = reward_function(reward, bin_idx, action_cont, price)
-            
+            actual_reward = reward_function(bin_idx, true_action, price,  price / daily_avg, 
+                                            price / weekly_avg, weekly_avg)
+            # print(f'reward: {round(actual_reward, 2)} price: {price} daily_avg: {round(daily_avg, 2)} weekly_avg: {round(weekly_avg, 2)} action: {action_cont}') 
+
             # Update agent
             agent.update(
-                bin_idx, price_idx, hour_idx, dow_idx, month_idx,
-                action_idx,
+                bin_idx, daily_r_idx, weekly_r_idx, hour_idx,
+                true_action,
                 actual_reward,
-                next_bin_idx, next_price_idx, next_hour_idx, next_dow_idx, next_month_idx,
+                next_bin_idx, next_daily_r_idx, next_weekly_r_idx, next_hour_idx,
                 terminated
             )
             
             # Update metrics
             total_reward += reward
             total_actual_reward += actual_reward
-            daily_reward += actual_reward
-            
-            # Track daily performance
-            if int(next_hour) == 1 and int(hour) == 24:  # Day completed
-                daily_rewards_history.append(daily_reward)
-                daily_reward = 0.0
-                
-                # Print daily stats every 7 days
-                if len(daily_rewards_history) % 7 == 0:
-                    avg_daily = np.mean(list(daily_rewards_history)[-7:])
-                    print(f"Day {len(daily_rewards_history)} - Avg Daily Reward: {avg_daily:.2f}")
             
             state = next_state
 
@@ -173,33 +158,33 @@ def main():
 
     # Fill unvisited states with defaults
     for b in range(agent.n_bins):
-        for p in range(agent.n_prices):
-            for h in range(agent.n_hours):
-                for d in range(agent.n_dow):
-                    for m in range(agent.n_month):
-                        qvals = agent.Q[b, p, h, d, m, :]
+        for d in range(agent.n_daily_ratio):
+            for w in range(agent.n_weekly_ratio):
+                for h in range(agent.n_hours):
+                        qvals = agent.Q[b, d, w, h, :]
                         if np.allclose(qvals, 0.0):
-                            if p <= 9 and b < 17:  # Low price & not full => buy
+                            if d <= 1 and w <= 1 and b < 4:  # Low price & not full => buy
                                 qvals[1] = 1  # prefer buy
-                            elif p >= agent.n_prices - 2:  # High price => sell
+                            elif d == 6 or w == 6 and b > 0:  # High price => sell
+                                qvals[2] = 1  # prefer sell
+                            elif b == 5:
                                 qvals[2] = 1  # prefer sell
                             else:
                                 qvals[0] = 1  # prefer hold
-                            agent.Q[b, p, h, d, m, :] = qvals
+                            agent.Q[b, d, w, h, :] = qvals
 
     # Save Q-table to CSV
     rows = []
     for b in range(agent.n_bins):
-        for p in range(agent.n_prices):
-            for h in range(agent.n_hours):
-                for d in range(agent.n_dow):
-                    for m in range(agent.n_month):
-                        qvals = agent.Q[b, p, h, d, m, :]
-                        rows.append([b, p, h, d, m] + list(qvals))
+        for d in range(agent.n_daily_ratio):
+            for w in range(agent.n_weekly_ratio):
+                for h in range(agent.n_hours):
+                        qvals = agent.Q[b, d, w, h, :]
+                        rows.append([b, d, w, h] + list(qvals))
 
     df_q = pd.DataFrame(
         rows, 
-        columns=["bin", "price", "hour", "dow", "month", "Q_hold", "Q_buy", "Q_sell"]
+        columns=["bin", "daily_ratio", "weekly_ratio", "hour", "Q_hold", "Q_buy", "Q_sell"]
     )
     df_q.to_csv("q_table.csv", index=False)
     print("\nSaved Q-table to q_table.csv")
