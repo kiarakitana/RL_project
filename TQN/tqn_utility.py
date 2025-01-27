@@ -29,14 +29,14 @@ class PriceTracker:
         """Get daily moving average"""
         if len(self.daily_prices) > 0:
             return np.mean(self.daily_prices)
-        return 50.0  # Default value if no history
+        return 47.0  # Default value if no history
         
     @property
     def biweekly_avg(self):
         """Get 2-week moving average"""
         if len(self.biweekly_prices) > 0:
             return np.mean(self.biweekly_prices)
-        return 50.0  # Default value if no history
+        return 47.0  # Default value if no history
 
 def small_storage_bin(storage_level, bin_size=10.0, max_storage=170.0, req_storage=120.0):
     if storage_level <= 0:
@@ -66,15 +66,15 @@ def weekly_avg_diff_bins(price, weekly_avg):
 
 def hour_bins(hour):
     """Convert hours to discrete bins"""
-    bins = np.array([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22])
+    bins = np.array([0, 8, 16])
     return np.searchsorted(bins, hour, side='right') - 1
 
 def reward_function(storage, action, price,  daily_r, weekly_r, weekly_avg):
     alfa = 0.8
 
-    reduce_selling = 1
-    if action < 0:
-        reduce_selling = 0.8
+    # reduce_selling = 1
+    # if action < 0:
+    #     reduce_selling = 0.8
 
     storage_bonus = 0
     if storage < 2:                  # when storage low give small reward for buying and penalty for selling

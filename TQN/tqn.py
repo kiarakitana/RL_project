@@ -7,7 +7,7 @@ class QLearningAgent:
                  n_bins=6,
                  n_daily_ratio = 7,
                  n_weekly_ratio = 7,
-                 n_hours=12,
+                 n_hours=3,
                  n_actions=3,
                  alpha=0.3,
                  gamma=0.99,
