@@ -1,29 +1,22 @@
-import argparse
 import pickle
 import sys
 import os
-from collections import deque
-
-# Add parent directory to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from env import DataCenterEnv
 from tqn_utility import *
 from tqn import *
 
-def validate():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='validate.xlsx',
-                       help='Path to the validation Excel data file.')
-    args = parser.parse_args()
+# Add parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def validate(path='validate.xlsx', show=False, agent=False):
     # Load the trained agent
-    try:
-        with open('trained_agent_best.pkl', 'rb') as f:
-            agent = pickle.load(f)
-    except FileNotFoundError:
-        print("Error: trained_agent.pkl not found. Please run training first.")
-        return
+    if not agent:
+        try:
+            with open('trained_agent_best.pkl', 'rb') as f:
+                agent = pickle.load(f)
+        except FileNotFoundError:
+            print("Error: trained_agent.pkl not found. Please run training first.")
+            return
 
     # Set epsilon=0 for purely greedy evaluation
     agent.epsilon = 0.0
@@ -33,14 +26,13 @@ def validate():
     price_tracker = PriceTracker()
 
     # Create the environment with the validation set
-    env = DataCenterEnv(args.path)
+    env = DataCenterEnv(path)
     state = env.observation()
     terminated = False
 
     total_reward = 0.0
     total_actual_reward = 0.0
-    show = 366
-    h = 0
+    h = 366
 
     while not terminated:
         storage_level, price, hour, day = state
@@ -82,20 +74,22 @@ def validate():
         total_actual_reward += actual_reward
         state = next_state
 
-        if h <= show:
-            if action_idx == 0:
-                a = 'hold'
-            if action_idx == 1:
-                a = 'buy'
-            if action_idx == 2:
-                a = 'sell'
-            print(f'day: {day}  |  hour: {hour}  |  storage: {storage_level}  |  price: {price}  |  daily avg: {round(daily_avg, 2)}  |  biweekly avg: {round(weekly_avg, 2)}  action: {a}  | reward: {round(actual_reward, 2)}')
-            h += 1
+        if show:
+            if h != 0:
+                if action_idx == 0:
+                    a = 'hold'
+                if action_idx == 1:
+                    a = 'buy'
+                if action_idx == 2:
+                    a = 'sell'
+                print(f'day: {day}  |  hour: {hour}  |  storage: {storage_level}  |  price: {price}  |  daily avg: {round(daily_avg, 2)}  |  biweekly avg: {round(weekly_avg, 2)}  action: {a}  | reward: {round(actual_reward, 2)}')
+                h -= 1
 
 
     print("\nValidation Results:")
     print(f"Total Environment Reward: {total_reward:.2f}")
     print(f"Total Shaped Reward: {total_actual_reward:.2f}")
+    return total_reward
 
 if __name__ == "__main__":
     validate()

@@ -135,7 +135,7 @@ def run_training(args):
                 print("Convergence criterion met (last 5 rewards differ by < 1%). Stopping early.")
                 break
     if args.tuning: 
-        return total_reward
+        return agent
 
     print("\nTraining Summary:")
     print(f"Final action distribution:")

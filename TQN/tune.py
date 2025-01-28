@@ -1,7 +1,7 @@
-import argparse
 from itertools import product
 import numpy as np
 from tqn_main import run_training
+from tqn_validate import validate
 
 def main():
     hyperparams = {
@@ -30,10 +30,11 @@ def main():
                 self.tuning = True
 
         args = Args(gamma, alpha, alfa, reduce_sell)
-        total_reward = run_training(args)
+        agent = run_training(args)
+        reward = validate(agent=agent)
         
-        if total_reward < best_reward:
-            best_reward = total_reward
+        if reward < best_reward:
+            best_reward = reward
             best_hyperparams = {
                 'gamma': gamma,
                 'alpha': alpha,
