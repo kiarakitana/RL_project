@@ -32,16 +32,16 @@ class QLearningAgent:
         # Initialize Q-table
         self.Q = np.zeros((n_bins, n_daily_ratio, n_weekly_ratio, n_hours, n_actions), dtype=float)
 
-    def get_action(self, bin_idx, daily_r_idx, weekly_r_idx, hour_idx, price, weekly_avg):
+    def get_action(self, bin_idx, daily_r_idx, weekly_r_idx, hour_idx):
         """
         Epsilon-greedy over the 5D state.
         """
         if random.random() < self.epsilon:
-            if bin_idx > 0 and price >= 3 * weekly_avg:
-                return -1
+            if bin_idx > 0 and weekly_r_idx == 2 or daily_r_idx == 2:
+                return 2
             if bin_idx == 0:
-                return np.random.choice([0, 1])
-            return np.random.choice([-1, 0, 1])
+                return np.random.randint(self.n_actions - 1)
+            return np.random.randint(self.n_actions)
         else:
             return np.argmax(self.Q[bin_idx, daily_r_idx, weekly_r_idx, hour_idx, :])
         

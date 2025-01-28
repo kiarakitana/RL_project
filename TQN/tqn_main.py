@@ -12,55 +12,35 @@ from env import DataCenterEnv
 from tqn_utility import *
 from tqn import *
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='train.xlsx', 
-                        help='Path to the Excel data file.')
-    parser.add_argument('--epochs', type=int, default=151,
-                        help='Number of passes over the entire dataset.')
-    parser.add_argument('--alpha', type=float, default=0.2,
-                        help='Learning rate.')
-    parser.add_argument('--gamma', type=float, default=0.99,
-                        help='Discount factor.')
-    parser.add_argument('--epsilon_decay', type=float, default=0.98,
-                        help="Multiply epsilon by this factor each epoch.")
-    parser.add_argument('--epsilon_min', type=float, default=0.1,
-                        help="Minimum epsilon value to avoid overfitting.")
-    args = parser.parse_args()
-
-    path_to_dataset = args.path
-    
+def run_training(args):
     # Create the agent
-    agent = QLearningAgent(alpha=args.alpha,
-                          gamma=args.gamma,
-                          epsilon=1)
+    agent = QLearningAgent(alpha=args.alpha, gamma=args.gamma, epsilon=1)
     
-    # Use deques to store reward history
+    # Reward history
     actual_rewards_history = deque(maxlen=5)
     
-    # For multiple training epochs over the entire dataset
+    # Training loop
     for epoch in range(args.epochs):
         # Reset state
         terminated = False
         total_reward = 0.0
         total_actual_reward = 0.0
-        # daily_reward = 0.0
 
         # Keep track of action counts
         action_counts = np.zeros(agent.n_actions, dtype=int)
 
-        # Epsilon Strategy
+        # Epsilon
         if epoch == 0:
             agent.epsilon = 1.0  # pure random exploration
         elif epoch > args.epochs - 1:
             agent.epsilon = 0  # agent test run
         else:
-            # Decay epsilon but don't go below epsilon_min
+            # Decay epsilon
             agent.epsilon = max(args.epsilon_min,
                               agent.epsilon * args.epsilon_decay)
         
         # Reset environment and price tracker
-        env = DataCenterEnv(path_to_dataset)
+        env = DataCenterEnv(args.path)
         global price_tracker
         price_tracker = PriceTracker()  # Reset price history
         
@@ -70,7 +50,7 @@ def main():
             storage_level, price, hour, day = state
 
             # Update price tracker
-            price_tracker.update(price, day)
+            price_tracker.update(price)
             daily_avg = price_tracker.daily_avg
             weekly_avg = price_tracker.biweekly_avg
             
@@ -80,25 +60,34 @@ def main():
             daily_r_idx = daily_avg_diff_bins(price, daily_avg)
             weekly_r_idx = weekly_avg_diff_bins(price, weekly_avg)
 
-            # Get action from agent
-            action = agent.get_action(bin_idx, daily_r_idx, weekly_r_idx, hour_idx, price, weekly_avg)
+            # Get action index from agent
+            action_idx = agent.get_action(bin_idx, daily_r_idx, 
+                                          weekly_r_idx, hour_idx)
             
+            # Change to real action value
+            action = -1 if action_idx == 2 else action_idx
+
             # Step in the environment
             next_state, reward, terminated = env.step(action)
 
-            # Get the true action
-            true_action = 0 if reward == 0 else int(reward / reward)
+            # Get the true action based on reward
+            if reward > 0:
+                true_action = -1
+            elif reward < 0:
+                true_action = 1
+            else:
+                true_action = 0
+
+            # Get action index based on true action
+            action_idx = 2 if true_action == -1 else true_action
 
             # Count actions
-            if action == -1:
-                action_counts[2] += 1
-            else:
-                action_counts[true_action] += 1
+            action_counts[action_idx] += 1
             
             # Parse next state
             next_storage, next_price, next_hour, next_day = next_state
 
-            price_tracker.update(next_price, next_day)
+            price_tracker.update(next_price)
             next_daily_avg = price_tracker.daily_avg
             next_weekly_avg = price_tracker.biweekly_avg
 
@@ -108,14 +97,14 @@ def main():
             next_hour_idx = hour_bins(int(next_hour) - 1)
             
             # Calculate shaped reward using price history
-            actual_reward = reward_function(bin_idx, true_action, price,  price / daily_avg, 
-                                            price / weekly_avg, weekly_avg)
+            actual_reward = reward_function(bin_idx, true_action, price/daily_avg, 
+                                            price/weekly_avg, hour_idx)
             # print(f'reward: {round(actual_reward, 2)} price: {price} daily_avg: {round(daily_avg, 2)} weekly_avg: {round(weekly_avg, 2)} action: {action_cont}') 
 
             # Update agent
             agent.update(
                 bin_idx, daily_r_idx, weekly_r_idx, hour_idx,
-                true_action,
+                action_idx,
                 actual_reward,
                 next_bin_idx, next_daily_r_idx, next_weekly_r_idx, next_hour_idx,
                 terminated
@@ -124,7 +113,6 @@ def main():
             # Update metrics
             total_reward += reward
             total_actual_reward += actual_reward
-            
             state = next_state
 
         # Epoch complete - print stats
@@ -146,6 +134,8 @@ def main():
             if avg_5 != 0 and range_5 < 0.01 * abs(avg_5) and agent.epsilon == args.epsilon_min:
                 print("Convergence criterion met (last 5 rewards differ by < 1%). Stopping early.")
                 break
+    if args.tuning: 
+        return total_reward
 
     print("\nTraining Summary:")
     print(f"Final action distribution:")
@@ -184,15 +174,29 @@ def main():
 
     df_q = pd.DataFrame(
         rows, 
-        columns=["bin", "daily_ratio", "weekly_ratio", "hour", "Q_hold", "Q_buy", "Q_sell"]
+        columns=["Bin", "Daily_Ratio", "Weekly_Ratio", "Hour", "Hold", "Buy", "Sell"]
     )
     df_q.to_csv("q_table.csv", index=False)
-    print("\nSaved Q-table to q_table.csv")
+    print("\nSaved Q-table in q_table.csv")
 
     # Save trained agent
     with open('trained_agent.pkl', 'wb') as f:
         pickle.dump(agent, f)
-    print("Saved trained agent to trained_agent.pkl")
+    print("Agent saved in trained_agent.pkl")
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path', type=str, default='train.xlsx')
+    parser.add_argument('--epochs', type=int, default=121)
+    parser.add_argument('--alpha', type=float, default=0.2)
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--epsilon_decay', type=float, default=0.98)
+    parser.add_argument('--epsilon_min', type=float, default=0.1)
+    parser.add_argument('--alfa_reward', type=float, default=0.75)
+    parser.add_argument('--reduce_selling_value', type=float, default=2/3)
+    parser.add_argument('--tuning', type=bool, default=False)
+    args = parser.parse_args()
+    run_training(args)
 
 if __name__ == "__main__":
     main()
