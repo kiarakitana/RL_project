@@ -16,9 +16,10 @@ class PriceTracker:
         self.biweekly_prices.append(default)
         
     def update(self, price):
-        """Update averages"""
-        self.daily_prices.append(price)
-        self.biweekly_prices.append(price)
+        """Update averages if it's not an outlier"""
+        if price/self.daily_avg >= 0.2 and price/self.daily_avg <= 2:
+            self.daily_prices.append(price)
+            self.biweekly_prices.append(price)
         
     @property
     def daily_avg(self):
@@ -65,9 +66,7 @@ def hour_bins(hour):
     bins = np.array([0, 8, 16])
     return np.searchsorted(bins, hour, side='right') - 1
 
-def reward_function(storage, action, daily_r, weekly_r, hour):
-    alfa = 0.75
-
+def reward_function(storage, action, daily_r, weekly_r, hour, alfa=0.8):
     price_advantage = alfa * daily_r + (1 - alfa) * weekly_r
     price_advantage = np.clip(price_advantage, 0, 2)
 
@@ -77,18 +76,20 @@ def reward_function(storage, action, daily_r, weekly_r, hour):
 
     storage_bonus = action
     # if storage < 2:                  # when storage low give small reward for buying and penalty for selling
-    #     storage_bonus = 1 * action
+    #     storage_bonus = action
     if storage >= 4 and action > 0:  # buying above the capacity
         storage_bonus = -5
     if storage == 5 and action == 0: # waiting above capacity
         storage_bonus = -5
-    if storage >= 2 and action == 0: # waiting above req
-        storage_bonus = 1
+    # if storage >= 2 and action == 0: # waiting above req
+    #     storage_bonus = 1
 
+    # Extra bonus for selling
     selling_high = 0
     if price_advantage >= 1.75 and action < 0:
         selling_high = 5
 
+    # Extra bonus for buying low
     buying_low = 0
     if storage < 4 and action > 0 and price_advantage <= 0.75:
         buying_low = 2

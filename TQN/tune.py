@@ -1,24 +1,24 @@
 from itertools import product
 import numpy as np
+import pickle
 from tqn_main import run_training
 from tqn_validate import validate
 
 def main():
     hyperparams = {
-        'gamma': [0.99, 0.95, 0.8],
-        'alpha': [0.1, 0.2, 0.3, 0.5],
-        'alfa_reward': [0.6, 0.75, 0.8],
-        'reduce_selling_value': [0.5, 2/3, 0.8]
+        'gamma': [0.99, 0.95],
+        'alpha': [0.1, 0.3, 0.5],
+        'alfa_reward': [0.6, 0.8],
     }
 
-    best_reward = -np.inf
+    best_reward = np.inf
     best_hyperparams = {}
 
-    for gamma, alpha, alfa, reduce_sell in product(*hyperparams.values()):
-        print(f"Testing gamma={gamma}, alpha={alpha}, alfa={alfa}, reduce_sell={reduce_sell}")
+    for gamma, alpha, alfa in product(*hyperparams.values()):
+        print(f"Testing: gamma={gamma}, alpha={alpha}, alfa={alfa}")
         
         class Args:
-            def __init__(self, gamma, alpha, alfa_reward, reduce_selling_value):
+            def __init__(self, gamma, alpha, alfa_reward):
                 self.path = 'train.xlsx'
                 self.epochs = 120  # Reduced for quicker tuning; adjust as needed
                 self.alpha = alpha
@@ -26,10 +26,9 @@ def main():
                 self.epsilon_decay = 0.98
                 self.epsilon_min = 0
                 self.alfa_reward = alfa_reward
-                self.reduce_selling_value = reduce_selling_value
                 self.tuning = True
 
-        args = Args(gamma, alpha, alfa, reduce_sell)
+        args = Args(gamma, alpha, alfa)
         agent = run_training(args)
         reward = validate(agent=agent)
         
@@ -39,9 +38,19 @@ def main():
                 'gamma': gamma,
                 'alpha': alpha,
                 'alfa_reward': alfa,
-                'reduce_selling_value': reduce_sell
             }
             print(f"New best reward: {best_reward}")
+            try:
+                with open('best_params.txt', 'w', encoding='utf-8') as file:
+                    for key, value in best_hyperparams.items():
+                        file.write(f"{key}: {value}\n")
+                print(f"Dictionary successfully saved to best_params.txt")
+            except Exception as e:
+                print(f"An error occurred: {e}")
+            # Save trained agent
+            with open('best_tuned_agent.pkl', 'wb') as f:
+                pickle.dump(agent, f)
+            print("Agent saved in trained_agent.pkl")
 
     print("\nBest Hyperparameters:")
     for key, value in best_hyperparams.items():

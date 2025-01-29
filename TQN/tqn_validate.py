@@ -1,12 +1,13 @@
 import pickle
 import sys
 import os
-from env import DataCenterEnv
-from tqn_utility import *
-from tqn import *
 
 # Add parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from env import DataCenterEnv
+from tqn_utility import *
+from tqn import *
 
 def validate(path='validate.xlsx', show=False, agent=False):
     # Load the trained agent
@@ -82,7 +83,7 @@ def validate(path='validate.xlsx', show=False, agent=False):
                     a = 'buy'
                 if action_idx == 2:
                     a = 'sell'
-                print(f'day: {day}  |  hour: {hour}  |  storage: {storage_level}  |  price: {price}  |  daily avg: {round(daily_avg, 2)}  |  biweekly avg: {round(weekly_avg, 2)}  action: {a}  | reward: {round(actual_reward, 2)}')
+                print(f'day: {day} | hour: {hour} | storage: {storage_level} | price: {price} | daily avg: {round(daily_avg, 2)} | biweekly avg: {round(weekly_avg, 2)} action: {a} | reward: {round(actual_reward, 2)}')
                 h -= 1
 
 

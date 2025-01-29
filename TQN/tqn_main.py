@@ -49,7 +49,7 @@ def run_training(args):
         while not terminated:
             storage_level, price, hour, day = state
 
-            # Update price tracker
+            # Update price tracker if no outlier 
             price_tracker.update(price)
             daily_avg = price_tracker.daily_avg
             weekly_avg = price_tracker.biweekly_avg
@@ -96,10 +96,9 @@ def run_training(args):
             next_weekly_r_idx = weekly_avg_diff_bins(price, next_weekly_avg)
             next_hour_idx = hour_bins(int(next_hour) - 1)
             
-            # Calculate shaped reward using price history
+            # Calculate shaped reward
             actual_reward = reward_function(bin_idx, true_action, price/daily_avg, 
-                                            price/weekly_avg, hour_idx)
-            # print(f'reward: {round(actual_reward, 2)} price: {price} daily_avg: {round(daily_avg, 2)} weekly_avg: {round(weekly_avg, 2)} action: {action_cont}') 
+                                            price/weekly_avg, hour_idx, args.alfa_reward) 
 
             # Update agent
             agent.update(
@@ -154,13 +153,13 @@ def run_training(args):
                         qvals = agent.Q[b, d, w, h, :]
                         if np.allclose(qvals, 0.0):
                             if d <= 1 and w <= 1 and b < 4:  # Low price & not full => buy
-                                qvals[1] = 1  # prefer buy
+                                qvals[1] = 1  # buy
                             elif d == 6 or w == 6 and b > 0:  # High price => sell
-                                qvals[2] = 1  # prefer sell
+                                qvals[2] = 1  # sell
                             elif b == 5:
-                                qvals[2] = 1  # prefer sell
+                                qvals[2] = 1  # sell
                             else:
-                                qvals[0] = 1  # prefer hold
+                                qvals[0] = 1  # hold
                             agent.Q[b, d, w, h, :] = qvals
 
     # Save Q-table to CSV
@@ -192,8 +191,7 @@ def main():
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--epsilon_decay', type=float, default=0.98)
     parser.add_argument('--epsilon_min', type=float, default=0.1)
-    parser.add_argument('--alfa_reward', type=float, default=0.75)
-    parser.add_argument('--reduce_selling_value', type=float, default=2/3)
+    parser.add_argument('--alfa_reward', type=float, default=0.8)
     parser.add_argument('--tuning', type=bool, default=False)
     args = parser.parse_args()
     run_training(args)
