@@ -9,7 +9,7 @@ from env import DataCenterEnv
 from tqn_utility import *
 from tqn import *
 
-def validate(path='validate.xlsx', show=False, agent=False):
+def validate(path='validate.xlsx', show=False, agent=False, create_state_action_df=True):
     # Load the trained agent
     if not agent:
         try:
@@ -34,6 +34,7 @@ def validate(path='validate.xlsx', show=False, agent=False):
     total_reward = 0.0
     total_actual_reward = 0.0
     h = 366
+    rows = []
 
     while not terminated:
         storage_level, price, hour, day = state
@@ -85,6 +86,32 @@ def validate(path='validate.xlsx', show=False, agent=False):
                     a = 'sell'
                 print(f'day: {day} | hour: {hour} | storage: {storage_level} | price: {price} | daily avg: {round(daily_avg, 2)} | biweekly avg: {round(weekly_avg, 2)} action: {a} | reward: {round(actual_reward, 2)}')
                 h -= 1
+        
+        if create_state_action_df:
+            if action_idx == 0:
+                action_str = 'hold'
+            elif action_idx == 1:
+                action_str = 'buy'
+            else:
+                action_str = 'sell'
+
+            rows.append({
+                'day': day,
+                'hour': hour,
+                'storage': storage_level,
+                'price': price,
+                'daily_avg': daily_avg,
+                'weekly_avg': weekly_avg,
+                'action': action_str,
+                'reward': round(actual_reward, 2)
+            })
+
+    if create_state_action_df and rows:
+        df = pd.DataFrame(rows, columns=[
+            'day', 'hour', 'storage', 'price', 
+            'daily_avg', 'weekly_avg', 'action', 'reward'
+        ])
+        df.to_csv("state_action_data.csv", index=False)
 
 
     print("\nValidation Results:")

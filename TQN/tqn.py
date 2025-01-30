@@ -12,10 +12,7 @@ class QLearningAgent:
                  alpha=0.3,
                  gamma=0.99,
                  epsilon=0.1):
-        """
-        A simple tabular Q-learning agent with:
-          Q[storage_bin, hour, action]
-        """
+
         self.n_bins = n_bins
         self.n_daily_ratio = n_daily_ratio
         self.n_weekly_ratio = n_weekly_ratio
@@ -34,7 +31,7 @@ class QLearningAgent:
 
     def get_action(self, bin_idx, daily_r_idx, weekly_r_idx, hour_idx):
         """
-        Epsilon-greedy over the 5D state.
+        Epsilon-greedy or take max
         """
         if random.random() < self.epsilon:
             if bin_idx > 0 and weekly_r_idx == 2 or daily_r_idx == 2:
@@ -52,8 +49,7 @@ class QLearningAgent:
                next_bin_idx, next_daily_r_idx, next_weekly_r_idx, next_hour_idx,
                done):
         """
-        Tabular Q-learning update:
-          Q(s,a) = (1-alpha)*Q(s,a) + alpha*(r + gamma*max_a' Q(s', a'))
+        Tabular Q-learning update
         """
         old_value = self.Q[bin_idx, daily_r_idx, weekly_r_idx, hour_idx, action_idx]
 
