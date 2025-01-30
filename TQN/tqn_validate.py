@@ -9,7 +9,7 @@ from env import DataCenterEnv
 from tqn_utility import *
 from tqn import *
 
-def validate(path='validate.xlsx', show=False, agent=False, create_state_action_df=True):
+def validate(path='validate.xlsx', show=False, agent=False, create_state_action_df=False):
     # Load the trained agent
     if not agent:
         try:
