@@ -3,6 +3,28 @@
 ## Overview
 This project is focused on reinforcement learning for managing energy storage in a data center environment. The main components of the project include training and validating an agent to optimize energy transactions based on given data.
 
+## Project Structure
+RL_project/
+├── __pycache__/
+├── analysis&baseline.ipynb
+├── env.py
+├── main.py
+├── plots.ipynb
+├── README.md
+├── requirements.txt
+├── TQN/
+│   ├── __init__.py
+│   ├── __pycache__/
+│   ├── TQN/tqn_main.py
+│   ├── tqn_utility.py
+│   ├── TQN/tqn_validate.py
+│   ├── tqn.py
+│   ├── tune.py
+├── train.xlsx
+├── trained_agent_best.pkl
+├── validate.xlsx
+
+
 ### Key Files and Directories
 
 - `env.py`: Contains the `DataCenterEnv` class, which defines the environment for the reinforcement learning agent.
